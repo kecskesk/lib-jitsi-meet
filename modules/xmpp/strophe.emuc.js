@@ -56,6 +56,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
             const errmsg = 'You are already in the room!';
 
             logger.warn(errmsg);
+
             return this.rooms[roomJid];
         }
         this.rooms[roomJid] = new ChatRoom(this.connection, jid,
