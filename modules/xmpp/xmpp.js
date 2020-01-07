@@ -1,7 +1,7 @@
 /* global $ */
 
 import { getLogger } from 'jitsi-meet-logger';
-import { $msg, Strophe } from 'strophe.js';
+import { $msg, $pres, Strophe } from 'strophe.js';
 import 'strophejs-plugin-disco';
 
 import RandomUtil from '../util/RandomUtil';
@@ -14,6 +14,7 @@ import initStropheUtil from './strophe.util';
 import initPing from './strophe.ping';
 import initRayo from './strophe.rayo';
 import initStropheLogger from './strophe.logger';
+import LastSuccessTracker from './StropheBoshLastSuccess';
 import Listenable from '../util/Listenable';
 import Caps from './Caps';
 import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
@@ -82,6 +83,9 @@ export default class XMPP extends Listenable {
 
         this.connection = createConnection(token, options.bosh);
 
+        this._lastSuccessTracker = new LastSuccessTracker();
+        this._lastSuccessTracker.startTracking(this.connection);
+
         this.caps = new Caps(this.connection, this.options.clientNode);
 
         // Initialize features advertised in disco-info
@@ -92,7 +96,11 @@ export default class XMPP extends Listenable {
         // they wanted to utilize the connected connection in an unload handler
         // of their own. However, it should be fairly easy for them to do that
         // by registering their unload handler before us.
-        $(window).on('beforeunload unload', this.disconnect.bind(this));
+        $(window).on('beforeunload unload', ev => {
+            this.disconnect(ev).catch(() => {
+                // ignore errors in order to not brake the unload.
+            });
+        });
     }
 
     /**
@@ -171,6 +179,8 @@ export default class XMPP extends Listenable {
         logger.log(
             `(TIME) Strophe ${statusStr}${msg ? `[${msg}]` : ''}:\t`,
             now);
+
+        this.eventEmitter.emit(XMPPEvents.CONNECTION_STATUS_CHANGED, credentials, status, msg);
         if (status === Strophe.Status.CONNECTED
             || status === Strophe.Status.ATTACHED) {
             if (this.options.useStunTurn
@@ -272,12 +282,16 @@ export default class XMPP extends Listenable {
                     this.eventEmitter.emit(
                         JitsiConnectionEvents.CONNECTION_FAILED,
                         JitsiConnectionErrors.SERVER_ERROR,
-                        errMsg || 'server-error');
+                        errMsg || 'server-error',
+                        /* credentials */ undefined,
+                        this._getConnectionFailedReasonDetails());
                 } else {
                     this.eventEmitter.emit(
                         JitsiConnectionEvents.CONNECTION_FAILED,
                         JitsiConnectionErrors.CONNECTION_DROPPED_ERROR,
-                        errMsg || 'connection-dropped-error');
+                        errMsg || 'connection-dropped-error',
+                        /* credentials */ undefined,
+                        this._getConnectionFailedReasonDetails());
                 }
             }
         } else if (status === Strophe.Status.AUTHFAIL) {
@@ -390,34 +404,35 @@ export default class XMPP extends Listenable {
     }
 
     /**
+     * Joins or creates a muc with the provided jid, created from the passed
+     * in room name and muc host and onCreateResource result.
      *
-     * @param roomName
-     * @param options
+     * @param {string} roomName - The name of the muc to join.
+     * @param {Object} options - Configuration for how to join the muc.
+     * @param {Function} [onCreateResource] - Callback to invoke when a resource
+     * is to be added to the jid.
+     * @returns {Promise} Resolves with an instance of a strophe muc.
      */
-    createRoom(roomName, options) {
-        // By default MUC nickname is the resource part of the JID
-        let mucNickname = Strophe.getNodeFromJid(this.connection.jid);
+    createRoom(roomName, options, onCreateResource) {
         let roomjid = `${roomName}@${this.options.hosts.muc}/`;
-        const cfgNickname
-            = options.useNicks && options.nick ? options.nick : null;
 
-        if (cfgNickname) {
-            // Use nick if it's defined
-            mucNickname = options.nick;
-        } else if (!this.authenticatedUser) {
-            // node of the anonymous JID is very long - here we trim it a bit
-            mucNickname = mucNickname.substr(0, 8);
-        }
+        const mucNickname = onCreateResource
+            ? onCreateResource(this.connection.jid, this.authenticatedUser)
+            : RandomUtil.randomHexString(8).toLowerCase();
 
-        // Constant JIDs need some random part to be appended in order to be
-        // able to join the MUC more than once.
-        if (this.authenticatedUser || cfgNickname !== null) {
-            mucNickname += `-${RandomUtil.randomHexString(6)}`;
-        }
-
+        logger.info(`JID ${this.connection.jid} using MUC nickname ${mucNickname}`);
         roomjid += mucNickname;
 
         return this.connection.emuc.createRoom(roomjid, null, options);
+    }
+
+    /**
+     * Returns the jid of the participant associated with the Strophe connection.
+     *
+     * @returns {string} The jid of the participant.
+     */
+    getJid() {
+        return this.connection.jid;
     }
 
     /**
@@ -465,23 +480,6 @@ export default class XMPP extends Listenable {
 
     /**
      *
-     * @param jid
-     * @param mute
-     */
-    setMute(jid, mute) {
-        this.connection.moderate.setMute(jid, mute);
-    }
-
-    /**
-     *
-     * @param jid
-     */
-    eject(jid) {
-        this.connection.moderate.eject(jid);
-    }
-
-    /**
-     *
      */
     getSessions() {
         return this.connection.jingle.sessions;
@@ -490,51 +488,92 @@ export default class XMPP extends Listenable {
     /**
      * Disconnects this from the XMPP server (if this is connected).
      *
-     * @param ev optionally, the event which triggered the necessity to
+     * @param {Object} ev - Optionally, the event which triggered the necessity to
      * disconnect from the XMPP server (e.g. beforeunload, unload).
+     * @returns {Promise} - Resolves when the disconnect process is finished or rejects with an error.
      */
     disconnect(ev) {
         if (this.disconnectInProgress || !this.connection) {
             this.eventEmitter.emit(JitsiConnectionEvents.WRONG_STATE);
 
-            return;
+            return Promise.reject(new Error('Wrong connection state!'));
         }
 
         this.disconnectInProgress = true;
 
-        // XXX Strophe is asynchronously sending by default. Unfortunately, that
-        // means that there may not be enough time to send an unavailable
-        // presence or disconnect at all. Switching Strophe to synchronous
-        // sending is not much of an option because it may lead to a noticeable
-        // delay in navigating away from the current location. As a compromise,
-        // we will try to increase the chances of sending an unavailable
-        // presence and/or disconecting within the short time span that we have
-        // upon unloading by invoking flush() on the connection. We flush() once
-        // before disconnect() in order to attemtp to have its unavailable
-        // presence at the top of the send queue. We flush() once more after
-        // disconnect() in order to attempt to have its unavailable presence
-        // sent as soon as possible.
-        this.connection.flush();
+        return new Promise(resolve => {
+            const disconnectListener = (credentials, status) => {
+                if (status === Strophe.Status.DISCONNECTED) {
+                    resolve();
+                    this.eventEmitter.removeListener(XMPPEvents.CONNECTION_STATUS_CHANGED, disconnectListener);
+                }
+            };
 
-        if (ev !== null && typeof ev !== 'undefined') {
-            const evType = ev.type;
+            this.eventEmitter.on(XMPPEvents.CONNECTION_STATUS_CHANGED, disconnectListener);
 
-            if (evType === 'beforeunload' || evType === 'unload') {
-                // XXX Whatever we said above, synchronous sending is the best
-                // (known) way to properly disconnect from the XMPP server.
-                // Consequently, it may be fine to have the source code and
-                // comment it in or out depending on whether we want to run with
-                // it for some time.
-                // This no longer works in Chrome
-                // this.connection.options.sync = true;
-            }
-        }
-
-        this.connection.disconnect();
-
-        if (this.connection.options.sync !== true) {
+            // XXX Strophe is asynchronously sending by default. Unfortunately, that
+            // means that there may not be enough time to send an unavailable
+            // presence or disconnect at all. Switching Strophe to synchronous
+            // sending is not much of an option because it may lead to a noticeable
+            // delay in navigating away from the current location. As a compromise,
+            // we will try to increase the chances of sending an unavailable
+            // presence and/or disconecting within the short time span that we have
+            // upon unloading by invoking flush() on the connection. We flush() once
+            // before disconnect() in order to attemtp to have its unavailable
+            // presence at the top of the send queue. We flush() once more after
+            // disconnect() in order to attempt to have its unavailable presence
+            // sent as soon as possible.
             this.connection.flush();
-        }
+
+            if (ev !== null && typeof ev !== 'undefined') {
+                const evType = ev.type;
+
+                if (evType === 'beforeunload' || evType === 'unload') {
+                    // XXX Whatever we said above, synchronous sending is the best
+                    // (known) way to properly disconnect from the XMPP server.
+                    // Consequently, it may be fine to have the source code and
+                    // comment it in or out depending on whether we want to run with
+                    // it for some time.
+                    this.connection.options.sync = true;
+
+                    // This is needed in some browsers where sync xhr sending
+                    // is disabled by default on unload
+                    if (navigator.sendBeacon && !this.connection.disconnecting
+                            && this.connection.connected) {
+                        this.connection._changeConnectStatus(Strophe.Status.DISCONNECTING);
+                        this.connection.disconnecting = true;
+
+                        const body = this.connection._proto._buildBody()
+                            .attrs({
+                                type: 'terminate'
+                            });
+                        const pres = $pres({
+                            xmlns: Strophe.NS.CLIENT,
+                            type: 'unavailable'
+                        });
+
+                        body.cnode(pres.tree());
+
+                        const res = navigator.sendBeacon(
+                            `https:${this.connection.service}`,
+                            Strophe.serialize(body.tree()));
+
+                        logger.info(`Successfully send unavailable beacon ${res}`);
+
+                        this.connection._proto._abortAllRequests();
+                        this.connection._doDisconnect();
+
+                        return;
+                    }
+                }
+            }
+
+            this.connection.disconnect();
+
+            if (this.connection.options.sync !== true) {
+                this.connection.flush();
+            }
+        });
     }
 
     /**
@@ -608,6 +647,7 @@ export default class XMPP extends Listenable {
         /* eslint-disable camelcase */
         // check for possible suspend
         details.suspend_time = this.connection.ping.getPingSuspendTime();
+        details.time_since_last_success = this._lastSuccessTracker.getTimeSinceLastSuccess();
         /* eslint-enable camelcase */
 
         return details;

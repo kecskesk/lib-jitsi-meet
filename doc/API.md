@@ -66,16 +66,27 @@ JitsiMeetJS.setLogLevel(JitsiMeetJS.logLevels.ERROR);
     - options - JS object with configuration options for the local media tracks. You can change the following properties there:
         1. devices - array with the devices - "desktop", "video" and "audio" that will be passed to GUM. If that property is not set GUM will try to get all available devices.
         2. resolution - the prefered resolution for the local video.
-        3. cameraDeviceId - the deviceID for the video device that is going to be used
-        4. micDeviceId - the deviceID for the audio device that is going to be used
-        5. minFps - the minimum frame rate for the video stream (passed to GUM)
-        6. maxFps - the maximum frame rate for the video stream (passed to GUM)
-        7. facingMode - facing mode for a camera (possible values - 'user', 'environment')
+        3. constraints - the prefered encoding properties for the created track (replaces 'resolution' in newer releases of browsers)
+        4. cameraDeviceId - the deviceID for the video device that is going to be used
+        5. micDeviceId - the deviceID for the audio device that is going to be used
+        6. minFps - the minimum frame rate for the video stream (passed to GUM)
+        7. maxFps - the maximum frame rate for the video stream (passed to GUM)
+        8. facingMode - facing mode for a camera (possible values - 'user', 'environment')
     - firePermissionPromptIsShownEvent - optional boolean parameter. If set to ```true```, ```JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN``` will be fired when browser shows gUM permission prompt.
 
+* ```JitsiMeetJS.createTrackVADEmitter(localAudioDeviceId, sampleRate, vadProcessor)``` - Creates a TrackVADEmitter service that connects an audio track to a VAD (voice activity detection) processor in order to obtain VAD scores for individual PCM audio samples.
+    - ```localAudioDeviceId``` - The target local audio device.
+    - ```sampleRate``` - Sample rate at which the emitter will operate. Possible values  256, 512, 1024, 4096, 8192, 16384. Passing other values will default to closes neighbor, i.e. Providing a value of 4096 means that the emitter will process bundles of 4096 PCM samples at a time, higher values mean longer calls, lowers values mean more calls but shorter.
+    - ```vadProcessor``` - VAD Processors that does the actual compute on a PCM sample.The processor needs to implement the following functions:
+        - getSampleLength() - Returns the sample size accepted by calculateAudioFrameVAD.
+        - getRequiredPCMFrequency() - Returns the PCM frequency at which the processor operates .i.e. (16KHz, 44.1 KHz etc.)
+        - calculateAudioFrameVAD(pcmSample) - Process a 32 float pcm sample of getSampleLength size.
 * ```JitsiMeetJS.enumerateDevices(callback)``` - __DEPRECATED__. Use ```JitsiMeetJS.mediaDevices.enumerateDevices(callback)``` instead.
 * ```JitsiMeetJS.isDeviceChangeAvailable(deviceType)``` - __DEPRECATED__. Use ```JitsiMeetJS.mediaDevices.isDeviceChangeAvailable(deviceType)``` instead.
 * ```JitsiMeetJS.isDesktopSharingEnabled()``` - returns true if desktop sharing is supported and false otherwise. NOTE: that method can be used after ```JitsiMeetJS.init(options)``` is completed otherwise the result will be always null.
+* ```JitsiMeetJS.getActiveAudioDevice()``` - goes through all audio devices on the system and returns information about one that is active, i.e. has audio signal. Returns a Promise resolving to an Object with the following structure:
+    - deviceId - string containing the device ID of the audio track found as active.
+    - deviceLabel - string containing the label of the audio device.
 * ```JitsiMeetJS.getGlobalOnErrorHandler()``` - returns function that can be used to be attached to window.onerror and if options.enableWindowOnErrorHandler is enabled returns the function used by the lib. (function(message, source, lineno, colno, error)).
 
 * ```JitsiMeetJS.mediaDevices``` - JS object that contains methods for interaction with media devices. Following methods are available:
@@ -100,6 +111,7 @@ JitsiMeetJS.setLogLevel(JitsiMeetJS.logLevels.ERROR);
         - TRACK_ADDED - stream received. (parameters - JitsiTrack)
         - TRACK_REMOVED - stream removed. (parameters - JitsiTrack)
         - TRACK_MUTE_CHANGED - JitsiTrack was muted or unmuted. (parameters - JitsiTrack)
+        - TRACK_AUDIO_LEVEL_CHANGED - audio level of JitsiTrack has changed. (parameters - participantId(string), audioLevel(number))
         - DOMINANT_SPEAKER_CHANGED - the dominant speaker is changed. (parameters - id(string))
         - USER_JOINED - new user joined a conference. (parameters - id(string), user(JitsiParticipant))
         - USER_LEFT - a participant left conference. (parameters - id(string), user(JitsiParticipant))
@@ -122,12 +134,18 @@ JitsiMeetJS.setLogLevel(JitsiMeetJS.logLevels.ERROR);
         - AUTH_STATUS_CHANGED - notifies that authentication is enabled or disabled, or local user authenticated (logged in). (parameters - isAuthEnabled(boolean), authIdentity(string))
         - ENDPOINT_MESSAGE_RECEIVED - notifies that a new message
         from another participant is received on a data channel.
+        - TALK_WHILE_MUTED - notifies that a local user is talking while having the microphone muted.
+        - NO_AUDIO_INPUT - notifies that the current selected input device has no signal.
+        - AUDIO_INPUT_STATE_CHANGE - notifies that the current conference audio input switched between audio input states i.e. with or without audio input.
 
     2. connection
         - CONNECTION_FAILED - indicates that the server connection failed.
         - CONNECTION_ESTABLISHED - indicates that we have successfully established server connection.
         - CONNECTION_DISCONNECTED - indicates that we are disconnected.
         - WRONG_STATE - indicates that the user has performed action that can't be executed because the connection is in wrong state.
+
+    3. detection
+        - VAD_SCORE_PUBLISHED - event generated by a TackVADEmitter when it computed a VAD score for an audio PCM sample.
 
     3. tracks
         - LOCAL_TRACK_STOPPED - indicates that a local track was stopped. This
@@ -137,7 +155,7 @@ JitsiMeetJS.setLogLevel(JitsiMeetJS.logLevels.ERROR);
     4. mediaDevices
         - DEVICE_LIST_CHANGED - indicates that list of currently connected devices has changed (parameters - devices(MediaDeviceInfo[])).
         - PERMISSION_PROMPT_IS_SHOWN - Indicates that the environment is currently showing permission prompt to access camera and/or microphone (parameters - environmentType ('chrome'|'opera'|'firefox'|'safari'|'nwjs'|'react-native'|'android').
-        
+
     5. connectionQuality
         - LOCAL_STATS_UPDATED - New local connection statistics are received. (parameters - stats(object))
         - REMOTE_STATS_UPDATED - New remote connection statistics are received. (parameters - id(string), stats(object))
@@ -216,15 +234,16 @@ This objects represents the server connection. You can create new ```JitsiConnec
 4. initJitsiConference(name, options) - creates new ```JitsiConference``` object.
     - name - the name of the conference
     - options - JS object with configuration options for the conference. You can change the following properties there:
-        1. openBridgeChannel - Enables/disables bridge channel. Values can be "datachannel", "websocket", true (treat it as "datachannel"), undefined (treat it as "datachannel") and false (don't open any channel). **NOTE: we recommend to set that option to true**
-        2. recordingType - the type of recording to be used
-        3. jirecon
-        4. callStatsID - callstats credentials
-        5. callStatsSecret - callstats credentials
-        6. enableTalkWhileMuted - boolean property. Enables/disables talk while muted detection, by default the value is false/disabled.
-        7. ignoreStartMuted - ignores start muted events coming from jicofo.
-        8. enableStatsID - enables sending callStatsUsername as stats-id in presence, jicofo and videobridge will use it as endpointID to report stats
-        9. enableDisplayNameInStats - enables sending the users display name, if set, to callstats as alias of the endpointID stats 
+        - openBridgeChannel - Enables/disables bridge channel. Values can be "datachannel", "websocket", true (treat it as "datachannel"), undefined (treat it as "datachannel") and false (don't open any channel). **NOTE: we recommend to set that option to true**
+        - recordingType - the type of recording to be used
+        - callStatsID - callstats credentials
+        - callStatsSecret - callstats credentials
+        - enableTalkWhileMuted - boolean property. Enables/disables talk while muted detection, by default the value is false/disabled.
+        - ignoreStartMuted - ignores start muted events coming from jicofo.
+        - startSilent - enables silent mode, will mark audio as inactive will not send/receive audio
+        - confID - Used for statistics to identify conference, if tenants are supported will contain tenant and the non lower case variant for the room name.
+        - statisticsId - The id to be used as stats instead of default callStatsUsername.
+        - statisticsDisplayName - The display name to be used for stats, used for callstats.
 
         **NOTE: if 4 and 5 are set the library is going to send events to callstats. Otherwise the callstats integration will be disabled.**
 
@@ -275,7 +294,10 @@ The object represents a conference. We have the following methods to control the
 10. setDisplayName(name) - changes the display name of the local participant.
     - name - the new display name
 
-11. selectParticipant(participantID) - Elects the participant with the given id to be the selected participant or the speaker. You should use that method if you are using simulcast.
+11. selectParticipant(participantId) - Elects the participant with the given id to be the selected participant in order to receive higher video quality (if simulcast is enabled).
+    - participantId - the identifier of the participant
+
+Throws NetworkError or InvalidStateError or Error if the operation fails.
 
 
 12. sendCommand(name, values) - sends user defined system command to the other participants
@@ -374,15 +396,15 @@ Throws NetworkError or InvalidStateError or Error if the operation fails.
 
 Throws NetworkError or InvalidStateError or Error if the operation fails.
 
-33. selectParticipant(participantId) - Elects the participant with the given id to be the selected participant in order to receive higher video quality (if simulcast is enabled).
+33. pinParticipant(participantId) - Elects the participant with the given id to be the pinned participant in order to always receive video for this participant (even when last n is enabled).
     - participantId - the identifier of the participant
 
 Throws NetworkError or InvalidStateError or Error if the operation fails.
 
-34. pinParticipant(participantId) - Elects the participant with the given id to be the pinned participant in order to always receive video for this participant (even when last n is enabled).
-    - participantId - the identifier of the participant
+34. setReceiverVideoConstraint(resolution) - set the desired resolution to get from JVB (180, 360, 720, 1080, etc).
+    You should use that method if you are using simulcast.
 
-Throws NetworkError or InvalidStateError or Error if the operation fails.
+35. isHidden - checks if local user has joined as a "hidden" user. This is a specialized role used for integrations.
 
 JitsiTrack
 ======

@@ -166,8 +166,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         const from = iq.getAttribute('from');
         const room = this.rooms[Strophe.getBareJidFromJid(from)];
 
-        // XXX What are the semantics of the return value? Why is it sometimes
-        // undefined and sometimes a boolean?
+        // Returning false would result in the listener being deregistered by Strophe
         if (!room) {
             return true;
         }

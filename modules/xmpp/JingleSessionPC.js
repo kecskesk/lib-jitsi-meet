@@ -4,7 +4,6 @@ import {
     ICE_DURATION,
     ICE_STATE_CHANGED
 } from '../../service/statistics/AnalyticsEvents';
-import async from 'async';
 import { getLogger } from 'jitsi-meet-logger';
 import { $iq, Strophe } from 'strophe.js';
 import { integerHash } from '../util/StringUtils';
@@ -19,6 +18,7 @@ import SignalingLayerImpl from './SignalingLayerImpl';
 import RTCEvents from '../../service/RTC/RTCEvents';
 import Statistics from '../statistics/statistics';
 import XMPPEvents from '../../service/xmpp/XMPPEvents';
+import AsyncQueue from '../util/AsyncQueue';
 import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
 
 const logger = getLogger(__filename);
@@ -212,8 +212,12 @@ export default class JingleSessionPC extends JingleSession {
          */
         this.signalingLayer = new SignalingLayerImpl();
 
-        this.modificationQueue
-            = async.queue(this._processQueueTasks.bind(this), 1);
+        /**
+         * The queue used to serialize operations done on the peerconnection.
+         *
+         * @type {AsyncQueue}
+         */
+        this.modificationQueue = new AsyncQueue();
 
         /**
          * Flag used to guarantee that the connection established event is
@@ -234,23 +238,12 @@ export default class JingleSessionPC extends JingleSession {
     /* eslint-enable max-params */
 
     /**
-     * Checks whether or not this session instance has been ended and eventually
-     * logs a message which mentions that given <tt>actionName</tt> was
-     * cancelled.
-     * @param {string} actionName
-     * @return {boolean} <tt>true</tt> if this {@link JingleSessionPC} has
-     * entered {@link JingleSessionState.ENDED} or <tt>false</tt> otherwise.
+     * Checks whether or not this session instance is still operational.
      * @private
+     * @returns {boolean} {@code true} if operation or {@code false} otherwise.
      */
-    _assertNotEnded(actionName) {
-        if (this.state === JingleSessionState.ENDED) {
-            logger.log(
-                `The session has ended - cancelling action: ${actionName}`);
-
-            return false;
-        }
-
-        return true;
+    _assertNotEnded() {
+        return this.state !== JingleSessionState.ENDED;
     }
 
     /**
@@ -281,7 +274,7 @@ export default class JingleSessionPC extends JingleSession {
         if (options.gatherStats) {
             pcOptions.maxstats = DEFAULT_MAX_STATS;
         }
-
+        pcOptions.capScreenshareBitrate = false;
         if (this.isP2P) {
             // simulcast needs to be disabled for P2P (121) calls
             pcOptions.disableSimulcast = true;
@@ -302,6 +295,25 @@ export default class JingleSessionPC extends JingleSession {
             pcOptions.enableFirefoxSimulcast
                 = options.testing && options.testing.enableFirefoxSimulcast;
             pcOptions.enableLayerSuspension = options.enableLayerSuspension;
+
+            // disable simulcast for screenshare and set the max bitrate to
+            // 500Kbps if the testing flag is present in config.js.
+            if (options.testing
+                && options.testing.capScreenshareBitrate
+                && typeof options.testing.capScreenshareBitrate === 'number') {
+                pcOptions.capScreenshareBitrate
+                    = Math.random()
+                    < options.testing.capScreenshareBitrate;
+
+                // add the capScreenshareBitrate to the permanent properties so
+                // that it's included with every event that we send to the
+                // analytics backend.
+                Statistics.analytics.addPermanentProperties({ capScreenshareBitrate: pcOptions.capScreenshareBitrate });
+            }
+        }
+
+        if (options.startSilent) {
+            pcOptions.startSilent = true;
         }
 
         this.peerconnection
@@ -368,15 +380,10 @@ export default class JingleSessionPC extends JingleSession {
         // "closed" instead.
         // I suppose at some point this will be moved to onconnectionstatechange
         this.peerconnection.onsignalingstatechange = () => {
-            if (!this.peerconnection) {
-                return;
-            }
             if (this.peerconnection.signalingState === 'stable') {
                 this.wasstable = true;
-            } else if (
-                (this.peerconnection.signalingState === 'closed'
-                || this.peerconnection.connectionState === 'closed')
-                && !this.closed) {
+            } else if (this.peerconnection.signalingState === 'closed'
+                || this.peerconnection.connectionState === 'closed') {
                 this.room.eventEmitter.emit(XMPPEvents.SUSPEND_DETECTED, this);
             }
         };
@@ -388,10 +395,6 @@ export default class JingleSessionPC extends JingleSession {
          * the value of RTCPeerConnection.iceConnectionState changes.
          */
         this.peerconnection.oniceconnectionstatechange = () => {
-            if (!this.peerconnection
-                    || !this._assertNotEnded('oniceconnectionstatechange')) {
-                return;
-            }
             const now = window.performance.now();
 
             if (!this.isP2P) {
@@ -469,9 +472,6 @@ export default class JingleSessionPC extends JingleSession {
                 this.isReconnect = false;
                 break;
             case 'disconnected':
-                if (this.closed) {
-                    break;
-                }
                 this.isReconnect = true;
 
                 // Informs interested parties that the connection has been
@@ -1008,7 +1008,6 @@ export default class JingleSessionPC extends JingleSession {
                             this.isInitiator ? 'answer: ' : 'offer: '}${error}`,
                         newRemoteSdp);
 
-                    this._onJingleFatalError(error);
                     finishedCallback(error);
                 });
         };
@@ -1055,6 +1054,15 @@ export default class JingleSessionPC extends JingleSession {
         jingleOfferElem
             .find('>content>description>ssrc-group')
             .remove();
+
+        // On the JVB it's not a real ICE restart and all layers are re-initialized from scratch as Jicofo does
+        // the restart by re-allocating new channels. Chrome (or WebRTC stack) needs to have the DTLS transport layer
+        // reset to start a new handshake with fresh DTLS transport on the bridge. Make it think that the DTLS
+        // fingerprint has changed by setting an all zeros key.
+        const newFingerprint = jingleOfferElem.find('>content>transport>fingerprint');
+
+        newFingerprint.attr('hash', 'sha-1');
+        newFingerprint.text('00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00');
 
         // First set an offer with a rejected 'data' section
         this.setOfferAnswerCycle(
@@ -1317,9 +1325,6 @@ export default class JingleSessionPC extends JingleSession {
      * @param reasonText
      */
     onTerminated(reasonCondition, reasonText) {
-        this.state = JingleSessionState.ENDED;
-        this.establishmentDuration = undefined;
-
         // Do something with reason and reasonCondition when we start to care
         // this.reasonCondition = reasonCondition;
         // this.reasonText = reasonText;
@@ -1486,24 +1491,6 @@ export default class JingleSessionPC extends JingleSession {
     }
 
     /**
-     * The 'task' function will be given a callback it MUST call with either:
-     *  1) No arguments if it was successful or
-     *  2) An error argument if there was an error
-     * If the task wants to process the success or failure of the task, it
-     * should pass a handler to the .push function, e.g.:
-     * queue.push(task, (err) => {
-     *     if (err) {
-     *         // error handling
-     *     } else {
-     *         // success handling
-     *     }
-     * });
-     */
-    _processQueueTasks(task, finishedCallback) {
-        task(finishedCallback);
-    }
-
-    /**
      * Takes in a jingle offer iq, returns the new sdp offer
      * @param {jquery xml element} offerIq the incoming offer
      * @returns {SDP object} the jingle offer translated to SDP
@@ -1580,16 +1567,22 @@ export default class JingleSessionPC extends JingleSession {
      */
     _renegotiate(optionalRemoteSdp) {
         if (this.peerconnection.signalingState === 'closed') {
-            return Promise.reject('Attempted to renegotiate in state closed');
+            const error = new Error('Attempted to renegotiate in state closed');
+
+            this.room.eventEmitter.emit(XMPPEvents.RENEGOTIATION_FAILED, error, this);
+
+            return Promise.reject(error);
         }
 
         const remoteSdp
             = optionalRemoteSdp || this.peerconnection.remoteDescription.sdp;
 
         if (!remoteSdp) {
-            return Promise.reject(
-                'Can not renegotiate without remote description,'
-                    + `- current state: ${this.state}`);
+            const error = new Error(`Can not renegotiate without remote description, current state: ${this.state}`);
+
+            this.room.eventEmitter.emit(XMPPEvents.RENEGOTIATION_FAILED, error, this);
+
+            return Promise.reject(error);
         }
 
         const remoteDescription = new RTCSessionDescription({
@@ -1673,6 +1666,19 @@ export default class JingleSessionPC extends JingleSession {
     }
 
     /**
+     * Replaces the existing mediaStream on the underlying peerconnection with the newly
+     * added stream on the same JitsiLocalTrack wihtout the need to perform a offer/answer
+     * cycle.
+     * @param {JitsiLocalTrack} track - the current track in use whose media stream has been
+     * updated.
+     * @returns {Promise} which resolves once the replacement is complete or reject with an
+     * error {string}.
+     */
+    replaceTrackWithoutOfferAnswer(track) {
+        return this.peerconnection.replaceTrackWithoutOfferAnswer(track);
+    }
+
+    /**
      * Replaces <tt>oldTrack</tt> with <tt>newTrack</tt> and performs a single
      * offer/answer cycle after both operations are done. Either
      * <tt>oldTrack</tt> or <tt>newTrack</tt> can be null; replacing a valid
@@ -1686,23 +1692,23 @@ export default class JingleSessionPC extends JingleSession {
      */
     replaceTrack(oldTrack, newTrack) {
         const workFunction = finishedCallback => {
-            // Check if the connection was closed and pretend everything is OK.
-            // This can happen if a track removal is scheduled but takes place
-            // after the connection is closed.
-            if (this.peerconnection.signalingState === 'closed'
-                || this.peerconnection.connectionState === 'closed'
-                || this.closed) {
-
-                finishedCallback();
-
-                return;
-            }
-
             const oldLocalSdp = this.peerconnection.localDescription.sdp;
 
             // NOTE the code below assumes that no more than 1 video track
             // can be added to the peer connection.
-            // Transition from no video to video (possibly screen sharing)
+            // Transition from camera to desktop share
+            // or transition from one camera source to another.
+            if (this.peerconnection.options.capScreenshareBitrate
+                && oldTrack && newTrack && newTrack.isVideoTrack()) {
+                // Clearing current primary SSRC will make
+                // the SdpConsistency generate a new one which will result
+                // with:
+                // 1. source-remove for the old video stream.
+                // 2. source-add for the new video stream.
+                this.peerconnection.clearRecvonlySsrc();
+            }
+
+            // Transition from no video to video (unmute).
             if (!oldTrack && newTrack && newTrack.isVideoTrack()) {
                 // Clearing current primary SSRC will make
                 // the SdpConsistency generate a new one which will result
@@ -1734,6 +1740,14 @@ export default class JingleSessionPC extends JingleSession {
 
                             this.notifyMySSRCUpdate(
                                 new SDP(oldLocalSdp), newLocalSDP);
+
+                            // configure max bitrate only when media is routed
+                            // through JVB. For p2p case, browser takes care of
+                            // adjusting the uplink based on the feedback it
+                            // gets from the peer.
+                            if (newTrack && !this.isP2P) {
+                                this.peerconnection.setMaxBitRate(newTrack);
+                            }
                             finishedCallback();
                         },
                         finishedCallback /* will be called with en error */);
@@ -2231,20 +2245,6 @@ export default class JingleSessionPC extends JingleSession {
     }
 
     /**
-     *
-     * @param error
-     * @private
-     */
-    _onJingleFatalError(error) {
-        if (this.room) {
-            this.room.eventEmitter.emit(
-                XMPPEvents.CONFERENCE_SETUP_FAILED, this, error);
-            this.room.eventEmitter.emit(
-                XMPPEvents.JINGLE_FATAL_ERROR, this, error);
-        }
-    }
-
-    /**
      * Returns the ice connection state for the peer connection.
      * @returns the ice connection state for the peer connection.
      */
@@ -2256,18 +2256,30 @@ export default class JingleSessionPC extends JingleSession {
      * Closes the peerconnection.
      */
     close() {
-        this.closed = true;
+        this.state = JingleSessionState.ENDED;
+        this.establishmentDuration = undefined;
 
-        // The signaling layer will remove it's listeners
-        this.signalingLayer.setChatRoom(null);
+        if (this.peerconnection) {
+            this.peerconnection.onicecandidate = null;
+            this.peerconnection.oniceconnectionstatechange = null;
+            this.peerconnection.onnegotiationneeded = null;
+            this.peerconnection.onsignalingstatechange = null;
+        }
 
-        // do not try to close if already closed.
-        this.peerconnection
-            && ((this.peerconnection.signalingState
-                    && this.peerconnection.signalingState !== 'closed')
-                || (this.peerconnection.connectionState
-                    && this.peerconnection.connectionState !== 'closed'))
-            && this.peerconnection.close();
+        // Remove any pending tasks from the queue
+        this.modificationQueue.clear();
+
+        this.modificationQueue.push(finishCallback => {
+            // The signaling layer will remove it's listeners
+            this.signalingLayer.setChatRoom(null);
+
+            // do not try to close if already closed.
+            this.peerconnection && this.peerconnection.close();
+            finishCallback();
+        });
+
+        // No more tasks can go in after the close task
+        this.modificationQueue.shutdown();
     }
 
     /**

@@ -257,6 +257,7 @@ export default function StatsCollector(
     this.currentAudioLevelsReport = null;
     this.currentStatsReport = null;
     this.previousStatsReport = null;
+    this.audioLevelReportHistory = {};
     this.audioLevelsIntervalId = null;
     this.eventEmitter = eventEmitter;
     this.conferenceStats = new ConferenceStats();
@@ -815,18 +816,6 @@ StatsCollector.prototype._processAndEmitReport = function() {
             } else {
                 logger.error(`No participant ID returned by ${track}`);
             }
-        } else if (this.peerconnection.isP2P) {
-            // NOTE For JVB connection there are JVB tracks reported in
-            // the stats, but they do not have corresponding JitsiRemoteTrack
-            // instances stored in TPC. It is not trivial to figure out that
-            // a SSRC belongs to JVB, so we print this error ony for the P2P
-            // connection for the time being.
-            //
-            // Also there will be reports for tracks removed from the session,
-            // for the users who have left the conference.
-            logger.error(
-                `JitsiTrack not found for SSRC ${ssrc}`
-                    + ` in ${this.peerconnection}`);
         }
 
         ssrcStats.resetBitrate();
@@ -858,6 +847,29 @@ StatsCollector.prototype._processAndEmitReport = function() {
             calculatePacketLoss(lostPackets.upload, totalPackets.upload)
     };
 
+    const avgAudioLevels = {};
+    let localAvgAudioLevels;
+
+    Object.keys(this.audioLevelReportHistory).forEach(ssrc => {
+        const { data, isLocal } = this.audioLevelReportHistory[ssrc];
+        const avgAudioLevel = data.reduce((sum, currentValue) => sum + currentValue) / data.length;
+
+        if (isLocal) {
+            localAvgAudioLevels = avgAudioLevel;
+        } else {
+            const track = this.peerconnection.getTrackBySSRC(Number(ssrc));
+
+            if (track) {
+                const participantId = track.getParticipantId();
+
+                if (participantId) {
+                    avgAudioLevels[participantId] = avgAudioLevel;
+                }
+            }
+        }
+    });
+    this.audioLevelReportHistory = {};
+
     this.eventEmitter.emit(
         StatisticsEvents.CONNECTION_STATS,
         this.peerconnection,
@@ -867,7 +879,9 @@ StatsCollector.prototype._processAndEmitReport = function() {
             'packetLoss': this.conferenceStats.packetLoss,
             'resolution': resolutions,
             'framerate': framerates,
-            'transport': this.conferenceStats.transport
+            'transport': this.conferenceStats.transport,
+            localAvgAudioLevels,
+            avgAudioLevels
         });
     this.conferenceStats.transport = [];
 };
@@ -953,6 +967,14 @@ StatsCollector.prototype.processAudioLevelReport = function() {
             } else {
                 audioLevel = audioLevel / 32767;
             }
+
+            if (!(ssrc in this.audioLevelReportHistory)) {
+                this.audioLevelReportHistory[ssrc] = {
+                    isLocal,
+                    data: []
+                };
+            }
+            this.audioLevelReportHistory[ssrc].data.push(audioLevel);
 
             this.eventEmitter.emit(
                 StatisticsEvents.AUDIO_LEVEL,
