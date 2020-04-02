@@ -1,6 +1,11 @@
 /* global __dirname */
 
+const webpack = require('webpack');
 const process = require('process');
+const childProcess = require('child_process');
+
+const commitHash = childProcess.execSync('git rev-parse HEAD').toString();
+const localChanges = childProcess.execSync('git status --porcelain | wc -l');
 
 const minimize
     = process.argv.indexOf('-p') !== -1
@@ -64,7 +69,13 @@ const config = {
     },
     externals: {
         'strophe.js': 'window'
-    }
+    },
+    plugins: [
+        new webpack.BannerPlugin({
+            banner: 'built from: https://github.com/kecskesk/lib-jitsi-meet - commit: '
+                + `${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
+        })
+    ]
 };
 
 module.exports = [
