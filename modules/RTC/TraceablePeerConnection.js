@@ -21,7 +21,7 @@ import SDPUtil from '../xmpp/SDPUtil';
 import * as SignalingEvents from '../../service/RTC/SignalingEvents';
 
 const logger = getLogger(__filename);
-const SIMULCAST_LAYERS = 3;
+const SIMULCAST_LAYERS = 1;
 const SIM_LAYER_1_RID = '1';
 const SIM_LAYER_2_RID = '2';
 const SIM_LAYER_3_RID = '3';
@@ -178,7 +178,8 @@ export default function TraceablePeerConnection(
     this.signalingLayer.on(
         SignalingEvents.PEER_MUTED_CHANGED,
         this._peerMutedChanged);
-    this.options = options;
+	this.options = options;
+	//this.options.disableSimulcast = true;
 
     this.peerconnection
         = new RTCUtils.RTCPeerConnectionType(iceConfig, constraints);
