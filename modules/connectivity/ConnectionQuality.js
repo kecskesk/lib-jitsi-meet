@@ -62,12 +62,12 @@ const kSimulcastFormats = [
  * bitrate. This cap helps in the cases where the participant's bitrate is high
  * but not enough to fulfill high targets, such as with 1080p.
  */
-const MAX_TARGET_BITRATE = 2500;
+const MAX_TARGET_BITRATE = 1500;
 
 /**
  * The initial bitrate for video in kbps.
  */
-let startBitrate = 800;
+let startBitrate = 600;
 
 
 /**
