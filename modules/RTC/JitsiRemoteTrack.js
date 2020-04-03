@@ -191,9 +191,6 @@ export default class JitsiRemoteTrack extends JitsiTrack {
      * Handles track play events.
      */
     _playCallback() {
-        if (this.disposed) {
-            return;
-        }
         const type = this.isVideoTrack() ? 'video' : 'audio';
 
         const now = window.performance.now();
