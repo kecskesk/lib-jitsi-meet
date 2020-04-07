@@ -55,8 +55,9 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         if (this.rooms[roomJid]) {
             const errmsg = 'You are already in the room!';
 
-            logger.error(errmsg);
-            throw new Error(errmsg);
+            logger.warn(errmsg);
+
+            return this.rooms[roomJid];
         }
         this.rooms[roomJid] = new ChatRoom(this.connection, jid,
             password, this.xmpp, options);
@@ -91,7 +92,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         const room = this.rooms[Strophe.getBareJidFromJid(from)];
 
         if (!room) {
-            return;
+            return true;
         }
 
         // Parse status.
@@ -114,7 +115,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         const room = this.rooms[Strophe.getBareJidFromJid(from)];
 
         if (!room) {
-            return;
+            return true;
         }
 
         room.onPresenceUnavailable(pres, from);
@@ -131,7 +132,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         const room = this.rooms[Strophe.getBareJidFromJid(from)];
 
         if (!room) {
-            return;
+            return true;
         }
 
         room.onPresenceError(pres, from);
@@ -149,7 +150,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         const room = this.rooms[Strophe.getBareJidFromJid(from)];
 
         if (!room) {
-            return;
+            return true;
         }
 
         room.onMessage(msg, from);
@@ -168,7 +169,7 @@ class MucConnectionPlugin extends ConnectionPluginListenable {
         // XXX What are the semantics of the return value? Why is it sometimes
         // undefined and sometimes a boolean?
         if (!room) {
-            return;
+            return true;
         }
 
         room.onMute(iq);

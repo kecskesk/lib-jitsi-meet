@@ -16,18 +16,17 @@
   "author": "",
   "readmeFilename": "README.md",
   "dependencies": {
-    "@jitsi/sdp-interop": "0.1.13",
+    "@jitsi/sdp-interop": "0.1.14",
     "@jitsi/sdp-simulcast": "0.2.1",
     "async": "0.9.0",
     "current-executing-script": "0.1.3",
     "jitsi-meet-logger": "github:jitsi/jitsi-meet-logger#6fff754a77a56ab52499f3559105a15886942a1e",
     "js-utils": "github:jitsi/js-utils#446497893023aa8dec403e0e4e35a22cae6bc87d",
     "lodash.isequal": "4.5.0",
-    "react-native-callstats": "3.53.4",
     "sdp-transform": "2.3.0",
     "strophe.js": "1.2.16",
     "strophejs-plugin-disco": "0.0.2",
-    "webrtc-adapter": "github:webrtc/adapter#1eec19782b4058d186341263e7d049cea3e3290a",
+    "webrtc-adapter": "github:kecskesk/adapter#aadf242ef03a39d203da4e544ffd6a104a7bf851",
     "yaeti": "1.0.1"
   },
   "devDependencies": {
@@ -41,10 +40,10 @@
     "babel-loader": "8.0.4",
     "core-js": "2.5.1",
     "eslint": "4.12.1",
-    "eslint-config-jitsi": "github:jitsi/eslint-config-jitsi#7474f6668515eb5852f1273dc5a50b940a550d3f",
+    "eslint-config-jitsi": "github:jitsi/eslint-config-jitsi#1.0.0",
     "eslint-plugin-flowtype": "2.39.1",
     "eslint-plugin-import": "2.8.0",
-    "flow-bin": "0.78.0",
+    "flow-bin": "0.92.0",
     "jasmine-core": "2.5.2",
     "karma": "3.0.0",
     "karma-chrome-launcher": "2.2.0",
@@ -57,10 +56,11 @@
   },
   "scripts": {
     "lint": "eslint . && flow",
-    "postinstall": "webpack -p",
     "test": "karma start karma.conf.js",
     "test-watch": "karma start karma.conf.js --no-single-run",
-    "validate": "npm ls"
+    "validate": "npm ls",
+    "build": "webpack -p",
+    "dev": "webpack"
   },
   "pre-commit": [
     "lint",

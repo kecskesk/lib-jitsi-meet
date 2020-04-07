@@ -19,6 +19,8 @@ import RTC from './modules/RTC/RTC';
 import TalkMutedDetection from './modules/TalkMutedDetection';
 import browser from './modules/browser';
 import ConnectionQuality from './modules/connectivity/ConnectionQuality';
+import IceFailedNotification
+    from './modules/connectivity/IceFailedNotification';
 import ParticipantConnectionStatusHandler
     from './modules/connectivity/ParticipantConnectionStatus';
 import E2ePing from './modules/e2eping/e2eping';
@@ -110,6 +112,9 @@ export default function JitsiConference(options) {
         throw new Error(errmsg);
     }
     this.eventEmitter = new EventEmitter();
+    if (typeof this.eventEmitter.setMaxListeners === 'function') {
+        this.eventEmitter.setMaxListeners(25);
+    }
     this.options = options;
     this.eventManager = new JitsiConferenceEventManager(this);
     this.participants = {};
@@ -434,6 +439,8 @@ JitsiConference.prototype.leave = function() {
         this.statistics.dispose();
     }
 
+    this._delayedIceFailed && this._delayedIceFailed.cancel();
+
     // Close both JVb and P2P JingleSessions
     if (this.jvbJingleSession) {
         this.jvbJingleSession.close();
@@ -467,15 +474,21 @@ JitsiConference.prototype.leave = function() {
 
         this.room = null;
 
-        return room.leave().catch(error => {
-            // remove all participants because currently the conference won't
-            // be usable anyway. This is done on success automatically by the
-            // ChatRoom instance.
-            this.getParticipants().forEach(
-                participant => this.onMemberLeft(participant.getJid()));
+        return room.leave()
+            .then(() => {
+                if (this.rtc) {
+                    this.rtc.destroy();
+                }
+            })
+            .catch(error => {
+                // remove all participants because currently the conference
+                // won't be usable anyway. This is done on success automatically
+                // by the ChatRoom instance.
+                this.getParticipants().forEach(
+                    participant => this.onMemberLeft(participant.getJid()));
 
-            throw error;
-        });
+                throw error;
+            });
     }
 
     // If this.room == null we are calling second time leave().
@@ -626,9 +639,9 @@ JitsiConference.prototype.addCommandListener = function(command, handler) {
   * Removes command  listener
   * @param command {String} the name of the command
   */
-JitsiConference.prototype.removeCommandListener = function(command) {
+JitsiConference.prototype.removeCommandListener = function(command, handler) {
     if (this.room) {
-        this.room.removePresenceListener(command);
+        this.room.removePresenceListener(command, handler);
     }
 };
 
@@ -1633,7 +1646,7 @@ JitsiConference.prototype._acceptJvbIncomingCall = function(
 
     const serverRegion
         = $(jingleOffer)
-            .find('>server-region[xmlns="http://jitsi.org/protocol/focus"]')
+            .find('>bridge-session[xmlns="http://jitsi.org/protocol/focus"]')
             .attr('region');
 
     this.eventEmitter.emit(
@@ -2364,6 +2377,15 @@ JitsiConference.prototype._onIceConnectionFailed = function(session) {
 
         }
         this._stopP2PSession('connectivity-error', 'ICE FAILED');
+    } else if (session && this.jvbJingleSession === session) {
+        if (this.xmpp.isPingSupported()) {
+            this._delayedIceFailed = new IceFailedNotification(this);
+            this._delayedIceFailed.start(session);
+        } else {
+            // Let Jicofo know that the JVB's ICE connection has failed
+            logger.info('PING not supported - sending ICE failed immediately');
+            session.sendIceFailedNotification();
+        }
     }
 };
 
@@ -2377,6 +2399,7 @@ JitsiConference.prototype._onIceConnectionRestored = function(session) {
         this.isP2PConnectionInterrupted = false;
     } else {
         this.isJvbConnectionInterrupted = false;
+        this._delayedIceFailed && this._delayedIceFailed.cancel();
     }
 
     if (session.isP2P === this.isP2PActive()) {

@@ -179,6 +179,7 @@ function getConstraints(um, options = {}) {
     // @see https://github.com/jitsi/lib-jitsi-meet/pull/136
     const isNewStyleConstraintsSupported
         = browser.isFirefox()
+            || browser.isSafariWithVP8()
             || browser.isEdge()
             || browser.isReactNative();
 
@@ -494,8 +495,10 @@ function getTrackSSConstraints(options = {}) {
  * @param stream the stream we received from calling getUserMedia.
  */
 function updateGrantedPermissions(um, stream) {
-    const audioTracksReceived = stream && stream.getAudioTracks().length > 0;
-    const videoTracksReceived = stream && stream.getVideoTracks().length > 0;
+    const audioTracksReceived
+        = Boolean(stream) && stream.getAudioTracks().length > 0;
+    const videoTracksReceived
+        = Boolean(stream) && stream.getVideoTracks().length > 0;
     const grantedPermissions = {};
 
     if (um.indexOf('video') !== -1) {
@@ -1021,10 +1024,10 @@ class RTCUtils extends Listenable {
      * @param {Object} options
      * @param {Object} options.desktopSharingExtensionExternalInstallation
      * @param {string[]} options.desktopSharingSources
-     * @param {Object} options.gumOptions.frameRate
-     * @param {Object} options.gumOptions.frameRate.min - Minimum fps
-     * @param {Object} options.gumOptions.frameRate.max - Maximum fps
-     * @returns {Promise} A promise which will be resolved with an object whic
+     * @param {Object} options.desktopSharingFrameRate
+     * @param {Object} options.desktopSharingFrameRate.min - Minimum fps
+     * @param {Object} options.desktopSharingFrameRate.max - Maximum fps
+     * @returns {Promise} A promise which will be resolved with an object which
      * contains the acquired display stream. If desktop sharing is not supported
      * then a rejected promise will be returned.
      */
@@ -1034,20 +1037,9 @@ class RTCUtils extends Listenable {
                 new Error('Desktop sharing is not supported!'));
         }
 
-        const {
-            desktopSharingExtensionExternalInstallation,
-            desktopSharingSources,
-            gumOptions
-        } = options;
-
         return new Promise((resolve, reject) => {
             screenObtainer.obtainStream(
-                {
-                    ...desktopSharingExtensionExternalInstallation,
-                    desktopSharingSources,
-                    gumOptions,
-                    trackOptions: getTrackSSConstraints(options)
-                },
+                this._parseDesktopSharingOptions(options),
                 stream => {
                     resolve(stream);
                 },
@@ -1308,32 +1300,50 @@ class RTCUtils extends Listenable {
                         device.kind === 'videoinput'
                             && (device.deviceId === desktopSharingSourceDevice
                             || device.label === desktopSharingSourceDevice));
-
                 const requestedDevices = [ 'video' ];
-                const constraints = newGetConstraints(
-                    requestedDevices, { options });
 
-                // Use exact to make sure there is no fallthrough to another
-                // camera device. If a matching device could not be found,
-                // try anyways and let the caller handle errors.
-                constraints.video.deviceId = {
-                    exact: (matchingDevice && matchingDevice.deviceId)
-                        || desktopSharingSourceDevice
+                // Leverage the helper used by {@link _newGetDesktopMedia} to
+                // get constraints for the desktop stream.
+                const { gumOptions, trackOptions }
+                    = this._parseDesktopSharingOptions(options);
+
+                // Create a custom constraints object to use exact device
+                // matching to make sure there is no fallthrough to another
+                // camera device. If a matching device could not be found, try
+                // anyways and let the caller handle errors.
+                const constraints = {
+                    video: {
+                        ...gumOptions,
+                        deviceId: {
+                            exact: (matchingDevice && matchingDevice.deviceId)
+                                || desktopSharingSourceDevice
+                        }
+                    }
                 };
 
                 return this._newGetUserMediaWithConstraints(
                     requestedDevices, constraints)
                     .then(stream => {
-                        return { stream };
+                        const track = stream && stream.getTracks()[0];
+                        const applyConstrainsPromise
+                            = track && track.applyConstraints
+                                ? track.applyConstraints(trackOptions)
+                                : Promise.resolve();
+
+                        return applyConstrainsPromise
+                            .then(() => {
+                                return {
+                                    sourceType: 'device',
+                                    stream
+                                };
+                            });
                     });
             }
 
             return this._newGetDesktopMedia({
                 desktopSharingExtensionExternalInstallation,
                 desktopSharingSources,
-                gumOptions: {
-                    frameRate: desktopSharingFrameRate
-                }
+                desktopSharingFrameRate
             });
         }.bind(this);
 
