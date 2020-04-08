@@ -21,7 +21,7 @@ import SDPUtil from '../xmpp/SDPUtil';
 import * as SignalingEvents from '../../service/RTC/SignalingEvents';
 
 const logger = getLogger(__filename);
-const SIMULCAST_LAYERS = 1;
+const SIMULCAST_LAYERS = 3;
 const SIM_LAYER_1_RID = '1';
 const SIM_LAYER_2_RID = '2';
 const SIM_LAYER_3_RID = '3';
@@ -179,7 +179,8 @@ export default function TraceablePeerConnection(
         SignalingEvents.PEER_MUTED_CHANGED,
         this._peerMutedChanged);
 	this.options = options;
-	//this.options.disableSimulcast = true;
+	// force to disable simulcast, no matter what...
+	this.options.disableSimulcast = true;
 
     this.peerconnection
         = new RTCUtils.RTCPeerConnectionType(iceConfig, constraints);
@@ -217,7 +218,7 @@ export default function TraceablePeerConnection(
 
     // override as desired
     this.trace = (what, info) => {
-        logger.debug(what, info);
+        console.log(what + ' ' + info);
 
         this.updateLog.push({
             time: new Date(),
@@ -1874,8 +1875,10 @@ TraceablePeerConnection.prototype.setRemoteDescription = function(description) {
 
     // TODO the focus should squeze or explode the remote simulcast
     // eslint-disable-next-line no-param-reassign
-    description = this.simulcast.mungeRemoteDescription(description);
-    this.trace(
+	description = this.simulcast.mungeRemoteDescription(description);
+	
+
+   this.trace(
         'setRemoteDescription::postTransform (simulcast)',
         dumpSDP(description));
 
