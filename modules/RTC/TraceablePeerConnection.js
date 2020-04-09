@@ -218,7 +218,7 @@ export default function TraceablePeerConnection(
 
     // override as desired
     this.trace = (what, info) => {
-        console.log(what + ' ' + info);
+        logger.debug(what, info);
 
         this.updateLog.push({
             time: new Date(),

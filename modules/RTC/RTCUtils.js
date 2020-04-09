@@ -63,6 +63,17 @@ const DEFAULT_CONSTRAINTS = {
             min: 240
         }
     }
+	
+/*
+	video: {
+        aspectRatio:  getUrlParameterAsNumberOrNull('aspectRatio') || 16 / 9,
+        height: {
+            ideal: getUrlParameterAsNumberOrNull('vidHIdeal') || 88,
+            max:  getUrlParameterAsNumberOrNull('vidHMax') || 88,
+            min:  getUrlParameterAsNumberOrNull('vidHMin') || 88
+        }
+	}
+*/
 };
 
 /**
@@ -97,6 +108,18 @@ const isAudioOutputDeviceChangeAvailable
 
 let availableDevices;
 let availableDevicesPollTimer;
+
+/*
+function getUrlParameterOrNull(paramName) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(paramName) || null;
+}
+
+function getUrlParameterAsNumberOrNull(paramName) {
+    const param = getUrlParameterOrNull(paramName);
+    return Number(param) || null;
+}
+*/
 
 /**
  * Initialize wrapper function for enumerating devices.

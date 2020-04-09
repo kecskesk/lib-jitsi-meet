@@ -561,7 +561,7 @@ export default class ortcRTCPeerConnection extends yaeti.EventTarget {
             throw new TypeError('description missing');
         }
 
-        logger.info('setLocalDescription() desc:', desc);
+        logger.debug('setLocalDescription() desc:', desc);
 
         return this._setLocalDescription(desc);
     }
@@ -577,7 +577,7 @@ export default class ortcRTCPeerConnection extends yaeti.EventTarget {
             throw new TypeError('description missing');
         }
 
-        logger.info('setRemoteDescription() desc:', desc);
+        logger.debug('setRemoteDescription() desc:', desc);
 
         return this._setRemoteDescription(desc);
     }

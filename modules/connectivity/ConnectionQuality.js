@@ -73,15 +73,15 @@ function getUrlParameterAsNumberOrNull(paramName) {
  * but not enough to fulfill high targets, such as with 1080p.
  */
 const MAX_TARGET_BITRATE =
-    getUrlParameterAsNumberOrNull('maxBitrateTarget') || 1500;
-// pass ?maxBitrateTarget=<number> to set. defaults to 1500.
+    getUrlParameterAsNumberOrNull('maxBitrateTarget') || 900;
+// pass ?maxBitrateTarget=<number> to set. defaults to 900.
 
 /**
  * The initial bitrate for video in kbps.
  */
 let startBitrate =
-    getUrlParameterAsNumberOrNull('startBitrate') || 600;
-// pass ?startBitrate=<number> to set. defaults to 600.
+    getUrlParameterAsNumberOrNull('startBitrate') || 300;
+// pass ?startBitrate=<number> to set. defaults to 300.
 
 /**
  * The current cap (in kbps) put on the video stream (or null if there isn't
