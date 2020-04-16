@@ -57,25 +57,40 @@ const kSimulcastFormats = [
         min: 30 }
 ];
 
+function getUrlParameterOrNull(paramName) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(paramName) || null;
+}
+
+function getUrlParameterAsNumberOrNull(paramName) {
+    const param = getUrlParameterOrNull(paramName);
+    return Number(param) || null;
+}
+
 /**
  * The maximum bitrate to use as a measurement against the participant's current
  * bitrate. This cap helps in the cases where the participant's bitrate is high
  * but not enough to fulfill high targets, such as with 1080p.
  */
-const MAX_TARGET_BITRATE = 2500;
+const MAX_TARGET_BITRATE =
+    getUrlParameterAsNumberOrNull('maxBitrateTarget') || 900;
+// pass ?maxBitrateTarget=<number> to set. defaults to 900.
 
 /**
  * The initial bitrate for video in kbps.
  */
-let startBitrate = 800;
-
+let startBitrate =
+    getUrlParameterAsNumberOrNull('startBitrate') || 300;
+// pass ?startBitrate=<number> to set. defaults to 300.
 
 /**
  * The current cap (in kbps) put on the video stream (or null if there isn't
  * a cap).  If there is a cap, we'll take it into account when calculating
  * the current quality.
  */
-let videoBitrateCap = null;
+let videoBitrateCap =
+    getUrlParameterAsNumberOrNull('videoBitrateCap') || null;
+// pass ?videoBitrateCap=<number> to set. defaults to null which means no cap (see JSDoc)
 
 /**
  * Gets the expected bitrate (in kbps) in perfect network conditions.

@@ -10,20 +10,20 @@ import Statistics from '../statistics/statistics';
 const logger = getLogger(__filename);
 
 /**
- * Default value of 500 milliseconds for
+ * Default value of 120000 milliseconds for
  * {@link ParticipantConnectionStatus.outOfLastNTimeout}.
  *
  * @type {number}
  */
-const DEFAULT_NOT_IN_LAST_N_TIMEOUT = 500;
+const DEFAULT_NOT_IN_LAST_N_TIMEOUT = 120000;
 
 /**
- * Default value of 2000 milliseconds for
+ * Default value of 120000 milliseconds for
  * {@link ParticipantConnectionStatus.rtcMuteTimeout}.
  *
  * @type {number}
  */
-const DEFAULT_RTC_MUTE_TIMEOUT = 2000;
+const DEFAULT_RTC_MUTE_TIMEOUT = 120000;
 
 /**
  * The time to wait a track to be restored. Track which was out of lastN
@@ -33,7 +33,7 @@ const DEFAULT_RTC_MUTE_TIMEOUT = 2000;
  * interrupted.
  * @type {number}
  */
-const DEFAULT_RESTORING_TIMEOUT = 5000;
+const DEFAULT_RESTORING_TIMEOUT = 120000;
 
 /**
  * Participant connection statuses.
@@ -605,7 +605,7 @@ export default class ParticipantConnectionStatusHandler {
             this._clearRestoringTimer(id);
         }
 
-        logger.debug(
+        logger.log(
             `Figure out conn status for ${id}, is video muted: ${
                 isVideoMuted} is active(jvb): ${
                 isConnActiveByJvb} video track frozen: ${
