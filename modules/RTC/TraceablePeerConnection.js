@@ -178,9 +178,13 @@ export default function TraceablePeerConnection(
     this.signalingLayer.on(
         SignalingEvents.PEER_MUTED_CHANGED,
         this._peerMutedChanged);
-	this.options = options;
-	// force to disable simulcast, no matter what...
-	this.options.disableSimulcast = true;
+    this.options = options;
+
+    console.log("Initializing TraceablePeerConnection with options: " +  JSON.stringify(this.options, null, 2));
+
+    // force to disable simulcast, no matter what...
+    this.options.disableSimulcast = true;
+    console.log('Simulcast was forced to be disabled.');
 
     this.peerconnection
         = new RTCUtils.RTCPeerConnectionType(iceConfig, constraints);
@@ -619,7 +623,7 @@ TraceablePeerConnection.prototype._remoteTrackAdded = function(stream, track) {
     const streamId = RTC.getStreamID(stream);
     const mediaType = track.kind;
 
-    logger.info(`${this} remote track added:`, streamId, mediaType);
+    logger.log(`${this} remote track added:`, streamId, mediaType);
 
     // look up an associated JID for a stream id
     if (!mediaType) {
@@ -2293,7 +2297,7 @@ TraceablePeerConnection.prototype._createOfferOrAnswer = function(
 
             const ssrcMap = extractSSRCMap(resultSdp);
 
-            logger.debug('Got local SSRCs MAP: ', ssrcMap);
+            logger.log('Got local SSRCs MAP: ', ssrcMap);
             this._processLocalSSRCsMap(ssrcMap);
 
             resolveFn(resultSdp);
