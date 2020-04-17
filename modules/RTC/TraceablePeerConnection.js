@@ -182,10 +182,6 @@ export default function TraceablePeerConnection(
 
     logger.log("Initializing TraceablePeerConnection with options: " +  JSON.stringify(this.options, null, 2));
 
-    // force to disable simulcast, no matter what...
-    this.options.disableSimulcast = true;
-    logger.log('Simulcast was forced to be disabled.');
-
     this.peerconnection
         = new RTCUtils.RTCPeerConnectionType(iceConfig, constraints);
     this.updateLog = [];
