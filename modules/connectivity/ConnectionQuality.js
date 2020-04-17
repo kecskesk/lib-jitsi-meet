@@ -72,16 +72,28 @@ function getUrlParameterAsNumberOrNull(paramName) {
  * bitrate. This cap helps in the cases where the participant's bitrate is high
  * but not enough to fulfill high targets, such as with 1080p.
  */
-const MAX_TARGET_BITRATE =
-    getUrlParameterAsNumberOrNull('maxBitrateTarget') || 900;
-// pass ?maxBitrateTarget=<number> to set. defaults to 900.
+
+let maxBitrateTarget;
 
 /**
  * The initial bitrate for video in kbps.
  */
-let startBitrate =
-    getUrlParameterAsNumberOrNull('startBitrate') || 300;
-// pass ?startBitrate=<number> to set. defaults to 300.
+let startBitrate;
+
+/**
+ * The default initial bitrate for video in kbps.
+ * Will be used if no startBitrate value is received either 
+ * from the options nor as a URL parameter.
+ */
+const START_BITRATE = 800;
+
+/**
+ * The default max target bitrate.
+ * Will be used if no maxBitrateTarget value is received either 
+ * from the options nor as a URL parameter.
+ 
+ */
+const MAX_TARGET_BITRATE = 2500;
 
 /**
  * The current cap (in kbps) put on the video stream (or null if there isn't
@@ -227,9 +239,26 @@ export default class ConnectionQuality {
         this._timeLastBwCapRemoved = -1;
 
         // We assume a global startBitrate value for the sake of simplicity.
-        if (options.startBitrate && options.startBitrate > 0) {
+        if (getUrlParameterAsNumberOrNull('startBitrate') &&  getUrlParameterAsNumberOrNull('startBitrate') > 0) {
+            // value coming as an URL parameter has the highest priority
+            startBitrate = getUrlParameterAsNumberOrNull('startBitrate');
+        } else if (options.startBitrate && options.startBitrate > 0) {
             startBitrate = options.startBitrate;
+        } else {
+            // let's use the default value
+            startBitrate = START_BITRATE;
         }
+        
+        if (getUrlParameterAsNumberOrNull('maxBitrateTarget') && getUrlParameterAsNumberOrNull('maxBitrateTarget') > 0) {
+            maxBitrateTarget = getUrlParameterAsNumberOrNull('maxBitrateTarget');
+        } else if (options.maxBitrateTarget && options.maxBitrateTarget > 0) {
+            maxBitrateTarget = options.maxBitrateTarget
+        } else {
+            // let's use the default value
+            maxBitrateTarget = MAX_TARGET_BITRATE;
+        }
+
+        logger.log('Video bitrate constraints: start:' + startBitrate + ' maxTarget: ' + maxBitrateTarget);
 
         // TODO: consider ignoring these events and letting the user of
         // lib-jitsi-meet handle these separately.
@@ -416,7 +445,7 @@ export default class ConnectionQuality {
             let target
                 = getTarget(isSimulcastOn, resolution, millisSinceStart);
 
-            target = Math.min(0.9 * target, MAX_TARGET_BITRATE);
+            target = Math.min(0.9 * target, maxBitrateTarget);
 
             if (videoBitrateCap) {
                 target = Math.min(target, videoBitrateCap);
