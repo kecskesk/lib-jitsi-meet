@@ -87,13 +87,6 @@ const config = {
     externals: {
         'strophe.js': 'window'
     },
-    plugins: [
-        new webpack.BannerPlugin({
-            banner: 'built from: https://github.com/kecskesk/lib-jitsi-meet - commit: '
-                + `${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
-        })
-    ]
-    },
     performance: {
         hints: minimize ? 'error' : false,
         maxAssetSize: 750 * 1024,
@@ -104,7 +97,11 @@ const config = {
             && new BundleAnalyzerPlugin({
                 analyzerMode: 'disabled',
                 generateStatsFile: true
-            })
+            }),
+			new webpack.BannerPlugin({
+				banner: 'built from: https://github.com/kecskesk/lib-jitsi-meet - commit: '
+				+ `${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
+			})
     ].filter(Boolean)
 };
 
