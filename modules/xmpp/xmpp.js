@@ -477,14 +477,54 @@ export default class XMPP extends Listenable {
         let roomjid = `${roomName}@${options.customDomain
             ? options.customDomain : this.options.hosts.muc.toLowerCase()}/`;
 
-        const mucNickname = onCreateResource
-            ? onCreateResource(this.connection.jid, this.authenticatedUser)
-            : RandomUtil.randomHexString(8).toLowerCase();
+        const mucNickname = this.generateResourcePartOfRoomJid(options, onCreateResource);
 
         logger.info(`JID ${this.connection.jid} using MUC nickname ${mucNickname}`);
         roomjid += mucNickname;
 
         return this.connection.emuc.createRoom(roomjid, null, options);
+    }
+
+    /**
+     * Generates the resource part aka MUC nickname for the given user
+     * that will be appended to the room's jid.
+     * 
+     * NOTE: This function has been added by Sonrisa in order to keep taking
+     * the options.useNicks into consideration. Jitsi developers (temporarly?)
+     * removed this option, but we highly depend on this because adding the
+     * user's own nickname (login name) to the resource part of the jid
+     * allows us to identify which track belongs to which VS user 
+     * (see: jitsi-util.ts#getUserIdFromVideoConference()).
+     * 
+     * Details about why this option was removed from jitsi-lib:
+     * https://community.jitsi.org/t/what-is-the-reason-to-remove-usenicks/19098
+     * https://github.com/jitsi/lib-jitsi-meet/pull/921
+     * 
+     *  
+     * @param {*} options - Configuration for how to join the muc.
+     * @param {*} onCreateResource - Callback to invoke when a resource
+     * is to be added to the jid.
+     * 
+     * @returns  MUC nickname for the current user
+     */
+    generateResourcePartOfRoomJid(options, onCreateResource) {
+        
+        const cfgNickname
+            = options.useNicks && options.nick ? options.nick : null;
+
+        
+        let mucNickname = '';
+
+        if (cfgNickname) {
+            // Use nick if it's defined
+            mucNickname = options.nick + '-';
+        } 
+
+        mucNickname += onCreateResource
+            ? onCreateResource(this.connection.jid, this.authenticatedUser)
+            : RandomUtil.randomHexString(8).toLowerCase();
+
+        return mucNickname;
     }
 
     /**
