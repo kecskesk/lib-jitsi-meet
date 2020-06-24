@@ -781,10 +781,11 @@ StatsCollector.prototype._processAndEmitReport = function() {
         bitrateUpload += ssrcStats.bitrate.upload;
 
         // collect resolutions and framerates
-        if (!ssrc){
+        if (!ssrc) {
             // preventing 'SSRC undefined is not a number' errors in Safari.
-            logger.debug('Stats collection failed. No SSRC is given. PeerConnection: ' + this.peerconnection);
-            return 
+            logger.debug(`Stats collection failed. No SSRC is given. PeerConnection: ${this.peerconnection}`);
+
+            return;
         }
         const track = this.peerconnection.getTrackBySSRC(ssrc);
 
