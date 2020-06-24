@@ -61,6 +61,6 @@ module.exports = function(config) {
         // if true, Karma captures browsers, runs the tests and exits
         singleRun: true,
 
-        webpack: require('./webpack.config.js')
+        webpack: require('./webpack.config.test.js')
     });
 };
