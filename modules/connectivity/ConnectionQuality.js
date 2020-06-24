@@ -57,13 +57,27 @@ const kSimulcastFormats = [
         min: 30 }
 ];
 
+/**
+ * Extracts a parameter with the given name from the URL
+ * and returns it as a string or returns null if it cannot be found.
+ *
+ * @param {*} paramName
+ */
 function getUrlParameterOrNull(paramName) {
     const params = new URLSearchParams(window.location.search);
+
     return params.get(paramName) || null;
 }
 
+/**
+ * Extracts a parameter with the given name from the URL
+ * and returns it as a number or returns null if it cannot be found.
+ *
+ * @param {*} paramName
+ */
 function getUrlParameterAsNumberOrNull(paramName) {
     const param = getUrlParameterOrNull(paramName);
+
     return Number(param) || null;
 }
 
@@ -82,16 +96,16 @@ let startBitrate;
 
 /**
  * The default initial bitrate for video in kbps.
- * Will be used if no startBitrate value is received either 
+ * Will be used if no startBitrate value is received either
  * from the options nor as a URL parameter.
  */
 const START_BITRATE = 800;
 
 /**
  * The default max target bitrate.
- * Will be used if no maxBitrateTarget value is received either 
+ * Will be used if no maxBitrateTarget value is received either
  * from the options nor as a URL parameter.
- 
+
  */
 const MAX_TARGET_BITRATE = 2500;
 
@@ -99,10 +113,12 @@ const MAX_TARGET_BITRATE = 2500;
  * The current cap (in kbps) put on the video stream (or null if there isn't
  * a cap).  If there is a cap, we'll take it into account when calculating
  * the current quality.
+ *
+ * Pass ?videoBitrateCap=<number> in the URL to set.
+ * Defaults to null which means no cap (see JSDoc)
  */
-let videoBitrateCap =
-    getUrlParameterAsNumberOrNull('videoBitrateCap') || null;
-// pass ?videoBitrateCap=<number> to set. defaults to null which means no cap (see JSDoc)
+let videoBitrateCap
+    = getUrlParameterAsNumberOrNull('videoBitrateCap') || null;
 
 /**
  * Gets the expected bitrate (in kbps) in perfect network conditions.
@@ -239,7 +255,7 @@ export default class ConnectionQuality {
         this._timeLastBwCapRemoved = -1;
 
         // We assume a global startBitrate value for the sake of simplicity.
-        if (getUrlParameterAsNumberOrNull('startBitrate') &&  getUrlParameterAsNumberOrNull('startBitrate') > 0) {
+        if (getUrlParameterAsNumberOrNull('startBitrate') && getUrlParameterAsNumberOrNull('startBitrate') > 0) {
             // value coming as an URL parameter has the highest priority
             startBitrate = getUrlParameterAsNumberOrNull('startBitrate');
         } else if (options.startBitrate && options.startBitrate > 0) {
@@ -248,17 +264,18 @@ export default class ConnectionQuality {
             // let's use the default value
             startBitrate = START_BITRATE;
         }
-        
-        if (getUrlParameterAsNumberOrNull('maxBitrateTarget') && getUrlParameterAsNumberOrNull('maxBitrateTarget') > 0) {
+
+        if (getUrlParameterAsNumberOrNull('maxBitrateTarget')
+            && getUrlParameterAsNumberOrNull('maxBitrateTarget') > 0) {
             maxBitrateTarget = getUrlParameterAsNumberOrNull('maxBitrateTarget');
         } else if (options.maxBitrateTarget && options.maxBitrateTarget > 0) {
-            maxBitrateTarget = options.maxBitrateTarget
+            maxBitrateTarget = options.maxBitrateTarget;
         } else {
             // let's use the default value
             maxBitrateTarget = MAX_TARGET_BITRATE;
         }
 
-        logger.log('Video bitrate constraints: start:' + startBitrate + ' maxTarget: ' + maxBitrateTarget);
+        logger.log(`Video bitrate constraints: start: ${startBitrate} maxTarget: ${maxBitrateTarget}`);
 
         // TODO: consider ignoring these events and letting the user of
         // lib-jitsi-meet handle these separately.
