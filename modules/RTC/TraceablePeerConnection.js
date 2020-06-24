@@ -180,7 +180,7 @@ export default function TraceablePeerConnection(
         this._peerMutedChanged);
     this.options = options;
 
-    logger.log("Initializing TraceablePeerConnection with options: " +  JSON.stringify(this.options, null, 2));
+    logger.log(`Initializing TraceablePeerConnection with options: ${JSON.stringify(this.options, null, 2)}`);
 
     this.peerconnection
         = new RTCUtils.RTCPeerConnectionType(iceConfig, constraints);
