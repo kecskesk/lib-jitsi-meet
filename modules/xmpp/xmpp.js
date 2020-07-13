@@ -517,7 +517,7 @@ export default class XMPP extends Listenable {
 
         if (cfgNickname) {
             // Use nick if it's defined
-            mucNickname = `${options.nick} -`;
+            mucNickname = `${options.nick}-`;
         }
 
         mucNickname += onCreateResource
