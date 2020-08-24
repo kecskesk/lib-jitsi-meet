@@ -2,8 +2,12 @@
 
 const webpack = require('webpack');
 const process = require('process');
-const childProcess = require('child_process');
 
+const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+
+const analyzeBundle = process.argv.indexOf('--analyze-bundle') !== -1;
+
+const childProcess = require('child_process');
 const commitHash = childProcess.execSync('git rev-parse HEAD').toString();
 const localChanges = childProcess.execSync('git status --porcelain | wc -l');
 
@@ -40,7 +44,19 @@ const config = {
 
                         // Tell babel to avoid compiling imports into CommonJS
                         // so that webpack may do tree shaking.
-                        { modules: false }
+                        {
+                            modules: false,
+
+                            // Specify our target browsers so no transpiling is
+                            // done unnecessarily. For browsers not specified
+                            // here, the ES2015+ profile will be used.
+                            targets: {
+                                chrome: 58,
+                                electron: 2,
+                                firefox: 54,
+                                safari: 11
+                            }
+                        }
                     ],
                     '@babel/preset-flow'
                 ],
@@ -75,12 +91,22 @@ const config = {
     externals: {
         'strophe.js': 'window'
     },
+    performance: {
+        hints: minimize ? 'error' : false,
+        maxAssetSize: 750 * 1024,
+        maxEntrypointSize: 750 * 1024
+    },
     plugins: [
+        analyzeBundle
+            && new BundleAnalyzerPlugin({
+                analyzerMode: 'disabled',
+                generateStatsFile: true
+            }),
         new webpack.BannerPlugin({
-            banner: 'built from: https://github.com/kecskesk/lib-jitsi-meet - commit: '
-                + `${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
+            banner: `built from: https://github.com/kecskesk/lib-jitsi-meet - commit:
+                    ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
         })
-    ]
+    ].filter(Boolean)
 };
 
 module.exports = config;
