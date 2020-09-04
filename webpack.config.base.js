@@ -1,13 +1,12 @@
 /* global __dirname */
 
-const webpack = require('webpack');
+const childProcess = require('child_process');
 const process = require('process');
-
+const webpack = require('webpack');
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 const analyzeBundle = process.argv.indexOf('--analyze-bundle') !== -1;
 
-const childProcess = require('child_process');
 const commitHash = childProcess.execSync('git rev-parse HEAD').toString();
 const localChanges = childProcess.execSync('git status --porcelain | wc -l');
 
