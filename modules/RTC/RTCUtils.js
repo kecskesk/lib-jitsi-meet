@@ -6,21 +6,24 @@
           RTCSessionDescription: true
 */
 
-import { AVAILABLE_DEVICE } from '../../service/statistics/AnalyticsEvents';
-import CameraFacingMode from '../../service/RTC/CameraFacingMode';
 import EventEmitter from 'events';
 import { getLogger } from 'jitsi-meet-logger';
-import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
+import clonedeep from 'lodash.clonedeep';
+
 import JitsiTrackError from '../../JitsiTrackError';
-import Listenable from '../util/Listenable';
+import CameraFacingMode from '../../service/RTC/CameraFacingMode';
 import * as MediaType from '../../service/RTC/MediaType';
-import Resolutions from '../../service/RTC/Resolutions';
-import browser from '../browser';
 import RTCEvents from '../../service/RTC/RTCEvents';
-import screenObtainer from './ScreenObtainer';
-import SDPUtil from '../xmpp/SDPUtil';
-import Statistics from '../statistics/statistics';
+import Resolutions from '../../service/RTC/Resolutions';
 import VideoType from '../../service/RTC/VideoType';
+import { AVAILABLE_DEVICE } from '../../service/statistics/AnalyticsEvents';
+import browser from '../browser';
+import Statistics from '../statistics/statistics';
+import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
+import Listenable from '../util/Listenable';
+import SDPUtil from '../xmpp/SDPUtil';
+
+import screenObtainer from './ScreenObtainer';
 
 const logger = getLogger(__filename);
 
@@ -374,14 +377,29 @@ function getConstraints(um, options = {}) {
 function newGetConstraints(um = [], options = {}) {
     // Create a deep copy of the constraints to avoid any modification of
     // the passed in constraints object.
-    const constraints = JSON.parse(JSON.stringify(
-        options.constraints || DEFAULT_CONSTRAINTS));
+    const constraints = clonedeep(options.constraints || DEFAULT_CONSTRAINTS);
 
     if (um.indexOf('video') >= 0) {
         if (!constraints.video) {
             constraints.video = {};
         }
 
+        // Override the constraints on Safari because of the following webkit bug.
+        // https://bugs.webkit.org/show_bug.cgi?id=210932
+        // Camera doesn't start on older macOS versions if min/max constraints are specified.
+        // TODO: remove this hack when the bug fix is available on Mojave, Sierra and High Sierra.
+        if (browser.isSafari()) {
+            if (constraints.video.height && constraints.video.height.ideal) {
+                constraints.video.height = { ideal: clonedeep(constraints.video.height.ideal) };
+            } else {
+                logger.warn('Ideal camera height missing, camera may not start properly');
+            }
+            if (constraints.video.width && constraints.video.width.ideal) {
+                constraints.video.width = { ideal: clonedeep(constraints.video.width.ideal) };
+            } else {
+                logger.warn('Ideal camera width missing, camera may not start properly');
+            }
+        }
         if (options.cameraDeviceId) {
             constraints.video.deviceId = options.cameraDeviceId;
         } else {
@@ -858,7 +876,7 @@ class RTCUtils extends Listenable {
             throw new Error(message);
         }
 
-        this._initPCConstraints(options);
+        this._initPCConstraints();
 
         screenObtainer.init(
             options,
@@ -905,17 +923,8 @@ class RTCUtils extends Listenable {
     /**
      * Creates instance objects for peer connection constraints both for p2p
      * and outside of p2p.
-     *
-     * @params {Object} options - Configuration for setting RTCUtil's instance
-     * objects for peer connection constraints.
-     * @params {boolean} options.useIPv6 - Set to true if IPv6 should be used.
-     * @params {Object} options.testing - Additional configuration for work in
-     * development.
-     * @params {Object} options.testing.forceP2PSuspendVideoRatio - True if
-     * video should become suspended if bandwidth estimation becomes low while
-     * in peer to peer connection mode.
      */
-    _initPCConstraints(options) {
+    _initPCConstraints() {
         if (browser.isFirefox()) {
             this.pcConstraints = {};
         } else if (browser.isChromiumBased() || browser.isReactNative()) {
@@ -928,11 +937,6 @@ class RTCUtils extends Listenable {
                 { googCpuUnderuseThreshold: 55 },
                 { googCpuOveruseThreshold: 85 }
             ] };
-
-            if (options.useIPv6) {
-                // https://code.google.com/p/webrtc/issues/detail?id=2828
-                this.pcConstraints.optional.push({ googIPv6: true });
-            }
 
             this.p2pPcConstraints
                 = JSON.parse(JSON.stringify(this.pcConstraints));
@@ -1012,7 +1016,6 @@ class RTCUtils extends Listenable {
      * in RTCUtils#_newGetUserMediaWithConstraints.
      *
      * @param {Object} options
-     * @param {Object} options.desktopSharingExtensionExternalInstallation
      * @param {string[]} options.desktopSharingSources
      * @param {Object} options.desktopSharingFrameRate
      * @param {Object} options.desktopSharingFrameRate.min - Minimum fps
@@ -1183,7 +1186,6 @@ class RTCUtils extends Listenable {
      */
     _parseDesktopSharingOptions(options) {
         return {
-            ...options.desktopSharingExtensionExternalInstallation,
             desktopSharingSources: options.desktopSharingSources,
             gumOptions: {
                 frameRate: options.desktopSharingFrameRate
@@ -1235,7 +1237,6 @@ class RTCUtils extends Listenable {
             }
 
             const {
-                desktopSharingExtensionExternalInstallation,
                 desktopSharingSourceDevice,
                 desktopSharingSources,
                 desktopSharingFrameRate
@@ -1292,7 +1293,6 @@ class RTCUtils extends Listenable {
             }
 
             return this._newGetDesktopMedia({
-                desktopSharingExtensionExternalInstallation,
                 desktopSharingSources,
                 desktopSharingFrameRate
             });

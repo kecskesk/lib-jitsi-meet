@@ -1,5 +1,5 @@
+import { BrowserDetection } from '@jitsi/js-utils';
 import { getLogger } from 'jitsi-meet-logger';
-import { BrowserDetection } from 'js-utils';
 
 const logger = getLogger(__filename);
 
@@ -80,7 +80,7 @@ export default class BrowserCapabilities extends BrowserDetection {
      * @returns {boolean}
      */
     isUserInteractionRequiredForUnmute() {
-        return (this.isFirefox() && this.isVersionLessThan('68')) || this.isSafari();
+        return this.isFirefox() && this.isVersionLessThan('68');
     }
 
     /**
@@ -123,6 +123,24 @@ export default class BrowserCapabilities extends BrowserDetection {
     }
 
     /**
+     * Checks if the current browser supports the Long Tasks API that lets us observe
+     * performance measurement events and be notified of tasks that take longer than
+     * 50ms to execute on the main thread.
+     */
+    supportsPerformanceObserver() {
+        return typeof window.PerformanceObserver !== 'undefined'
+            && PerformanceObserver.supportedEntryTypes.indexOf('longtask') > -1;
+    }
+
+    /**
+     * Checks if the current browser supports audio level stats on the receivers.
+     */
+    supportsReceiverStats() {
+        return typeof window.RTCRtpReceiver !== 'undefined'
+            && Object.keys(RTCRtpReceiver.prototype).indexOf('getSynchronizationSources') > -1;
+    }
+
+    /**
      * Checks if the current browser reports round trip time statistics for
      * the ICE candidate pair.
      * @return {boolean}
@@ -137,15 +155,6 @@ export default class BrowserCapabilities extends BrowserDetection {
         // https://bugzilla.mozilla.org/show_bug.cgi?id=1241066
         // For Chrome and others we rely on 'googRtt'.
         return !this.isFirefox();
-    }
-
-    /**
-     * Checks whether the browser supports RTPSender.
-     *
-     * @returns {boolean}
-     */
-    supportsRtpSender() {
-        return this.isFirefox() || this.isSafari();
     }
 
     /**
