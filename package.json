@@ -61,6 +61,7 @@
     "test-watch": "karma start karma.conf.js --no-single-run",
     "validate": "npm ls",
     "build": "webpack -p",
+    "postinstall": "webpack -p",
     "dev": "webpack",
     "watch": "webpack --config webpack.config.js --watch --mode development"
   },
