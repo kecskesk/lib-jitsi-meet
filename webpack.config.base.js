@@ -87,9 +87,6 @@ const config = {
         library: 'JitsiMeetJS',
         libraryTarget: 'umd'
     },
-    externals: {
-        'strophe.js': 'window'
-    },
     performance: {
         hints: minimize ? 'error' : false,
         maxAssetSize: 750 * 1024,

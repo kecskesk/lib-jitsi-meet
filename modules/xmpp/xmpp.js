@@ -3,6 +3,9 @@
 import { getLogger } from 'jitsi-meet-logger';
 import { $msg, Strophe } from 'strophe.js';
 import 'strophejs-plugin-disco';
+import 'strophejs-plugin-muc';
+import 'strophejs-plugin-rsm';
+import 'strophejs-plugin-mam';
 
 import * as JitsiConnectionErrors from '../../JitsiConnectionErrors';
 import * as JitsiConnectionEvents from '../../JitsiConnectionEvents';
