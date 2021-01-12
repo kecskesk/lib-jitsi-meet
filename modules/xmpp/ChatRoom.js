@@ -287,7 +287,7 @@ export default class ChatRoom extends Listenable {
         !this.connection.isUsingWebSocket && this.connection.flush();
         try {
             this.connection.send(pres);
-        } catch(error) {
+        } catch (error) {
             // we ignore this error since it is caused by asynch logout
             if (error.message !== 'Not connected') {
                 throw error;
