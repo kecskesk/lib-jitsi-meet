@@ -285,7 +285,14 @@ export default class ChatRoom extends Listenable {
         // possible.
         // FIXME do not use Strophe.Connection in the ChatRoom directly
         !this.connection.isUsingWebSocket && this.connection.flush();
-        this.connection.send(pres);
+        try {
+            this.connection.send(pres);
+        } catch(error) {
+            // we ignore this error since it is caused by asynch logout
+            if (error.message !== 'Not connected') {
+                throw error;
+            }
+        }
         this.connection.flush();
     }
 
