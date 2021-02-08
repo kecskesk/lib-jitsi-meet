@@ -100,9 +100,9 @@ module.exports = {
                 analyzerMode: 'disabled',
                 generateStatsFile: true
             }),
-            new webpack.BannerPlugin({
-                banner: `built from: https://github.com/kecskesk/lib-jitsi-meet - commit:
-                        ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
-            })
+        new webpack.BannerPlugin({
+            banner: `built from: https://github.com/kecskesk/lib-jitsi-meet - commit:
+                ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
+        })
     ].filter(Boolean)
 };

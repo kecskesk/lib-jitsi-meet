@@ -1,4 +1,4 @@
-const config = require('./webpack.config.base');
+const config = require('./webpack-shared-config.js');
 
 delete config.externals;
 
