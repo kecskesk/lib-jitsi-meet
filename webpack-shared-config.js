@@ -14,8 +14,9 @@ const minimize
     = process.argv.indexOf('-p') !== -1
         || process.argv.indexOf('--optimize-minimize') !== -1;
 
-const config = {
-    devtool: 'source-map',
+module.exports = {
+    // The inline-source-map is used to allow debugging the unit tests with Karma
+    devtool: minimize ? 'source-map' : 'inline-source-map',
     mode: minimize ? 'production' : 'development',
     module: {
         rules: [ {
@@ -62,6 +63,7 @@ const config = {
                 plugins: [
                     '@babel/plugin-transform-flow-strip-types',
                     '@babel/plugin-proposal-class-properties',
+                    '@babel/plugin-proposal-optional-chaining',
                     '@babel/plugin-proposal-export-namespace-from'
                 ]
             },
@@ -76,9 +78,6 @@ const config = {
     },
     optimization: {
         concatenateModules: minimize
-    },
-    entry: {
-        'lib-jitsi-meet': './index.js'
     },
     output: {
         filename: `[name]${minimize ? '.min' : ''}.js`,
@@ -103,9 +102,7 @@ const config = {
             }),
         new webpack.BannerPlugin({
             banner: `built from: https://github.com/kecskesk/lib-jitsi-meet - commit:
-                    ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
+                ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
         })
     ].filter(Boolean)
 };
-
-module.exports = config;
