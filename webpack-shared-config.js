@@ -1,9 +1,14 @@
 /* global __dirname */
 
+const childProcess = require('child_process');
 const process = require('process');
+const webpack = require('webpack');
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 const analyzeBundle = process.argv.indexOf('--analyze-bundle') !== -1;
+
+const commitHash = childProcess.execSync('git rev-parse HEAD').toString();
+const localChanges = childProcess.execSync('git status --porcelain | wc -l');
 
 const minimize
     = process.argv.indexOf('-p') !== -1
@@ -77,7 +82,12 @@ module.exports = {
     output: {
         filename: `[name]${minimize ? '.min' : ''}.js`,
         path: process.cwd(),
-        sourceMapFilename: `[name].${minimize ? 'min' : 'js'}.map`
+        sourceMapFilename: `[name].${minimize ? 'min' : 'js'}.map`,
+        library: 'JitsiMeetJS',
+        libraryTarget: 'umd'
+    },
+    externals: {
+        'strophe.js': 'window'
     },
     performance: {
         hints: minimize ? 'error' : false,
@@ -89,6 +99,10 @@ module.exports = {
             && new BundleAnalyzerPlugin({
                 analyzerMode: 'disabled',
                 generateStatsFile: true
+            }),
+            new webpack.BannerPlugin({
+                banner: `built from: https://github.com/kecskesk/lib-jitsi-meet - commit:
+                        ${commitHash.replace(/\n/g, '')}${localChanges > 0 ? ' - DIRTY' : ''}`
             })
     ].filter(Boolean)
 };
