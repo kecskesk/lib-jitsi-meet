@@ -124,18 +124,39 @@ function setResolutionConstraints(
         constraints,
         isNewStyleConstraintsSupported,
         resolution) {
-    if (Resolutions[resolution]) {
+    let selectedResolution = Resolutions[resolution];
+
+    // If requested resolution is not valid,
+    // select resolution where height attribute is closest to the requested value.
+    if (!selectedResolution && !isNaN(resolution)) {
+        Object.values(Resolutions).forEach(res => {
+            if (selectedResolution) {
+                const currentDiffFromRequested = Math.abs(selectedResolution.height - resolution);
+                const newDiff = Math.abs(res.height - resolution);
+
+                if (newDiff < currentDiffFromRequested) {
+                    selectedResolution = res;
+                }
+            } else {
+                selectedResolution = res;
+            }
+        });
+    }
+
+    if (selectedResolution) {
+        logger.info(`Selected resolution: [${selectedResolution.height} x ${selectedResolution.width}]`);
+
         if (isNewStyleConstraintsSupported) {
             constraints.video.width = {
-                ideal: Resolutions[resolution].width
+                ideal: selectedResolution.width
             };
             constraints.video.height = {
-                ideal: Resolutions[resolution].height
+                ideal: selectedResolution.height
             };
         }
 
-        constraints.video.mandatory.minWidth = Resolutions[resolution].width;
-        constraints.video.mandatory.minHeight = Resolutions[resolution].height;
+        constraints.video.mandatory.minWidth = selectedResolution.width;
+        constraints.video.mandatory.minHeight = selectedResolution.height;
     }
 
     if (constraints.video.mandatory.minWidth) {
